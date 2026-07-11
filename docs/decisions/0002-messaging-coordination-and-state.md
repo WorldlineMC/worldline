@@ -16,7 +16,7 @@ Continuity uses different mechanisms according to the required semantics:
 | Workload | Mechanism |
 | --- | --- |
 | Synchronous handoff commands and acknowledgements | Persistent direct proxy/server control connection |
-| Presence, leases, partition ownership, and temporary transfer state | Redis keys with expirations and atomic transitions |
+| Presence, live partition leases, cached ownership, and temporary transfer state | Redis keys with expirations and atomic transitions |
 | Reconstructible notifications and cache invalidation | Redis Pub/Sub |
 | Retryable asynchronous commands and events | Redis Streams |
 | Permanent control-plane metadata and durable audit records | SQL database |
