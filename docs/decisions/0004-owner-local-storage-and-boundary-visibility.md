@@ -95,6 +95,8 @@ If Alex later crosses to Server B, the same cluster identity and viewer-facing m
 
 This guarantee applies at partition boundaries. Crossing an ordinary chunk boundary inside one partition does not change servers.
 
+[ADR 0005](0005-player-handoff-state-machine.md) defines the player-session state machine, packet routing, commit point, and failure behavior used for this transition.
+
 ### Cross-boundary interactions
 
 When a local player targets a projected remote entity or block, the viewer server routes the interaction to the authoritative owner with the actor identity, target identity, relevant state version, and ownership epoch.
@@ -138,6 +140,7 @@ Direct player interactions across a boundary must use this ownership route. Comp
 - [ADR 0001: Transparent spatial sharding](0001-transparent-spatial-sharding.md)
 - [ADR 0002: Messaging, coordination, and durable state](0002-messaging-coordination-and-state.md)
 - [ADR 0003: Partition directory, allocation, and membership changes](0003-partition-directory-allocation-and-membership.md)
+- [ADR 0005: Player handoff state machine and packet continuity](0005-player-handoff-state-machine.md)
 - [Paper entity-tracking configuration](https://docs.papermc.io/paper/reference/spigot-configuration/#entity-tracking-range)
 
 ## Compliance

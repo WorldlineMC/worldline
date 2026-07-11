@@ -54,6 +54,16 @@ Remote entity projections are presentation objects. They do not tick, run AI or 
 
 Interactions with projected remote state are routed to the authoritative owner, which validates and applies them. Ordinary chunk boundaries do not trigger transfers; only configured partition boundaries do.
 
+## Player handoff
+
+A player crossing a partition boundary triggers a player handoff, not a partition migration. The destination partition keeps its existing owner and the durable partition directory does not change.
+
+The Continuity Proxy retains the client connection and coordinates an explicit prepare, freeze, snapshot-stage, commit, activate, and cleanup state machine. A player-session epoch fences the player's live authority independently from the destination partition's ownership epoch.
+
+Before commit, the source is the sole player authority and the destination may only prepare. After commit, the destination is the sole authority and the source cannot resume its previous epoch. Gameplay packets are routed or briefly buffered according to the current phase; protocol-control packets are handled separately and are never blindly replayed.
+
+The destination applies a versioned final player-state snapshot before buffered gameplay input is released. The source converts its tracked player into a boundary projection for nearby observers without an unnecessary client-visible removal.
+
 ## Non-negotiable invariants
 
 1. A player or partition has at most one authoritative Continuity Server at any instant.
@@ -67,6 +77,9 @@ Interactions with projected remote state are routed to the authoritative owner, 
 9. Only an authoritative owner writes partition world data; replicas and projections remain read-only.
 10. Players and entities remain visible across partition boundaries within the normal configured tracking rules.
 11. Boundary projections never become authoritative without an explicit coordinator commit and a newer ownership epoch.
+12. Player-session authority has its own epoch and exactly one authoritative server.
+13. A destination cannot create authoritative player side effects before handoff commit.
+14. A source can resume after a pre-commit abort, but can never resume an epoch that has committed to another server.
 
 ## Undecided details
 
@@ -75,7 +88,8 @@ This document intentionally does not yet choose:
 - Exact partition dimensions or automatic rebalancing heuristics
 - Durability replica placement, replication factor, journal format, synchronous mode, or recovery objectives
 - The SQL database engine or schema
-- The wire protocol used by direct proxy/server control connections
+- The wire protocol, packet classification, buffer limits, and timeout budgets used by direct proxy/server control connections
+- Production behavior for handoffs involving vehicles, open containers, sleeping, portals, or other complex player states
 - Complete mechanics for cross-boundary collisions, projectiles, explosions, fluids, redstone, or mob AI
 - Plugin API behavior for projected remote players and entities
 - The deployment topology for high availability

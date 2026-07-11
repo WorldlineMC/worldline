@@ -113,6 +113,8 @@ Moving an existing partition is an explicit state transition:
 
 Membership changes never move a partition implicitly. A future automatic rebalancer must use this same migration operation rather than creating a separate ownership path.
 
+A player entering a partition owned by another server does not migrate that partition or modify the partition directory. It uses the separate player-session handoff defined by [ADR 0005](0005-player-handoff-state-machine.md).
+
 ### Failure durability
 
 Graceful migration can preserve current state, but recovery after an unexpected process or machine failure is limited by the last durable or replicated state.
@@ -154,6 +156,7 @@ This ADR does not choose the physical partition-storage mechanism, journaling st
 - [ADR 0001: Transparent spatial sharding](0001-transparent-spatial-sharding.md)
 - [ADR 0002: Messaging, coordination, and durable state](0002-messaging-coordination-and-state.md)
 - [ADR 0004: Owner-local partition storage and boundary visibility](0004-owner-local-storage-and-boundary-visibility.md)
+- [ADR 0005: Player handoff state machine and packet continuity](0005-player-handoff-state-machine.md)
 - [Redis distributed-lock guidance](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)
 
 ## Compliance
