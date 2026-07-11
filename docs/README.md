@@ -33,6 +33,8 @@ To introduce or change an architectural decision:
 
 Corrections and clarifications may be applied to an accepted ADR only when they do not change its meaning.
 
+An accepted ADR may explicitly authorize a limited experimental vertical slice or protocol spike to substitute simpler infrastructure or reduced scope. Such an exception is conforming only within the exact experiment described by that ADR and does not weaken production requirements.
+
 ## Review rule
 
 A change must update these documents or add an ADR when it alters any of the following:
