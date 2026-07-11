@@ -64,6 +64,20 @@ The viewer server emits ordinary Minecraft packets for projected state. The prox
 
 Boundary projection uses persistent direct server connections rather than Redis Pub/Sub or Redis Streams. Reliable lifecycle messages establish and remove projections. High-rate transient updates carry ordering information and support snapshot resynchronization after a gap or reconnect. The exact wire protocol remains a separate decision.
 
+### Projection protocol message semantics
+
+Boundary projection and cross-boundary interaction messages follow the delivery contract required by ADR 0002:
+
+| Message type | Delivery semantics | Ordering | Idempotency or duplicate handling | Authoritative recovery state |
+| --- | --- | --- | --- | --- |
+| Projection subscribe | Retryable request/response | None beyond request identity | `subscription_id` | Current owner, authority epoch, and current visibility state |
+| Projection unsubscribe | Retryable request/response | None beyond request identity | `subscription_id` | Current subscription set |
+| Full projection snapshot | Retryable | Monotonic snapshot or state version | Snapshot version | Authoritative owner's current projected state |
+| Transient projection delta | Best effort | Per-stream monotonic sequence | Not retried; gaps force resynchronization | Full authoritative snapshot |
+| Cross-boundary interaction request | Retryable request/response | Actor action order where required by game semantics | Stable `operation_id` | Authoritative world and player state on the target owner |
+
+A receiving server rejects stale authority epochs and stale player-session epochs. A gap in a transient stream must never be guessed through; the receiver removes stale state when necessary and requests a full resynchronization.
+
 ### Remote entity projections
 
 A remote player or entity is represented on the viewer server by a read-only projection rather than a normal locally authoritative entity.
@@ -74,7 +88,10 @@ A projection:
 - Does not perform local physics or collision resolution
 - Is not persisted to local world files
 - Cannot be mutated through ordinary local ownership paths
-- Carries the authoritative owner's server identifier and ownership epoch
+- Carries the authoritative owner's server identifier
+- For a player, carries the player's current player-session epoch
+- For partition-scoped or non-player state, carries the relevant partition ownership epoch or equivalent authority token
+- Carries sufficient ordering information to reject stale or out-of-order updates
 - Is discarded or resynchronized when its stream becomes stale
 
 Remote projections are not exposed as ordinary mutable Paper entities. A future Continuity API may expose read-only remote-player and remote-entity views to plugins.
@@ -86,10 +103,11 @@ Entities use a stable cluster identity independent of their current owner. Viewe
 Consider Steve moving from a partition on Server A into a partition on Server B while Alex remains on Server A:
 
 1. Server B becomes Steve's sole authority after the handoff commits.
-2. Server A converts Steve's local tracked representation into a remote projection without removing Steve from Alex's view.
-3. Server B streams Steve's visible state to Server A.
-4. Server A continues emitting updates to Alex while Steve remains within Alex's configured tracking range.
-5. Server A removes the projection normally after no local player has interest in it.
+2. Steve's player-session epoch advances as part of that authority commit.
+3. Server A converts Steve's local tracked representation into a remote projection without removing Steve from Alex's view.
+4. Server B streams Steve's visible state to Server A using the committed player-session epoch.
+5. Server A continues emitting updates to Alex while Steve remains within Alex's configured tracking range.
+6. Server A removes the projection normally after no local player has interest in it.
 
 If Alex later crosses to Server B, the same cluster identity and viewer-facing mapping preserve continuity through her backend handoff.
 
@@ -99,9 +117,19 @@ This guarantee applies at partition boundaries. Crossing an ordinary chunk bound
 
 ### Cross-boundary interactions
 
-When a local player targets a projected remote entity or block, the viewer server routes the interaction to the authoritative owner with the actor identity, target identity, relevant state version, and ownership epoch.
+When a local player targets a projected remote entity or block, the viewer server routes the interaction to the authoritative owner with at least:
 
-The authoritative owner validates the request against current position, line of sight, cooldowns, permissions, and world state before applying any mutation. Results are returned through normal authoritative updates and boundary projection.
+~~~text
+operation_id
+actor_player_uuid
+actor_player_session_epoch
+target_identity
+target_owner_server_id
+target_authority_epoch
+relevant_state_version
+~~~
+
+The authoritative owner validates the request against current actor authority, target authority, position, line of sight, cooldowns, permissions, and world state before applying any mutation. Retryable interaction requests are deduplicated by `operation_id`, so duplicate delivery cannot apply the same authoritative action twice. Results are returned through normal authoritative updates and boundary projection.
 
 Direct player interactions across a boundary must use this ownership route. Complete semantics for collisions, projectiles, explosions, fluids, redstone, and AI spanning multiple owners remain undecided and require later decisions.
 
@@ -115,6 +143,8 @@ Direct player interactions across a boundary must use this ownership route. Comp
 - Players can see one another and surrounding terrain across a server boundary.
 - The proxy avoids becoming a centralized fan-in for every world tick.
 - Boundary bandwidth scales with active interest instead of total world size.
+- Player projection updates are fenced independently from partition ownership changes.
+- Retryable cross-boundary interactions cannot be applied twice merely because a request is redelivered.
 
 ### Costs and risks
 
@@ -124,6 +154,7 @@ Direct player interactions across a boundary must use this ownership route. Comp
 - Plugins cannot safely treat projected players as ordinary mutable local players.
 - Exact durability guarantees and many cross-boundary mechanics remain unresolved.
 - Small partitions would cause excessive halo overlap and transfer frequency.
+- Correct fencing requires separate handling for player-session epochs and partition ownership epochs.
 
 ## Rejected alternatives
 
@@ -134,6 +165,7 @@ Direct player interactions across a boundary must use this ownership route. Comp
 - **Compose every neighboring server's packets in the proxy:** centralizes per-tick world traffic and duplicates backend tracking logic.
 - **Expose projections as normal mutable Paper entities:** permits plugins and local systems to mutate non-authoritative state.
 - **Transfer at every chunk boundary:** creates constant handoffs and makes boundary replication dominate the system.
+- **Fence player projections only with partition ownership epoch:** a player handoff changes player-session authority without changing either partition's ownership epoch, so stale player updates would not be reliably rejected.
 
 ## References
 
@@ -153,6 +185,10 @@ An implementation conforms to this decision only if:
 - Steve remains visible to Alex across a handoff when he remains within tracking range.
 - A visible handoff does not unnecessarily despawn and respawn the transferred entity.
 - Projected chunks and entities never tick or persist on the viewer server.
+- Player projection updates carry and validate the current player-session epoch.
+- Partition-scoped and non-player projection updates carry and validate the relevant partition ownership epoch or equivalent authority token.
 - Interactions with projected state are routed to and validated by the authoritative owner.
+- Retryable interaction requests use stable operation identifiers and are idempotent under duplicate delivery.
+- Every message family documents delivery semantics, ordering, duplicate handling, and authoritative recovery state as required by ADR 0002.
 - Stream gaps, stale epochs, reconnects, and lost lifecycle messages trigger safe removal or full resynchronization.
-- Tests cover viewers on both sides of every partition edge and corner, including simultaneous handoffs.
+- Tests cover viewers on both sides of every partition edge and corner, including simultaneous handoffs, stale player-session epochs, duplicate interaction requests, and projection stream gaps.
