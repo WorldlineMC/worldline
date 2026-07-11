@@ -17,8 +17,12 @@ When a player moves into a partition owned by another Continuity Server, the pro
 
 Each Continuity Server requires:
 
-- **Redis** for temporary state and pub/sub messaging.
+- **Redis** for distributed coordination and short-lived messaging.
 - **SQL database** for permanent state.
+
+## Documentation
+
+Continuity's architecture and accepted design decisions live in [docs](docs/README.md). These documents are normative: implementation changes that conflict with an accepted decision must first supersede that decision.
 
 ## Status
 
