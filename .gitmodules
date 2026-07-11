@@ -1,0 +1,6 @@
+[submodule "server"]
+	path = server
+	url = https://github.com/rileycalhoun/continuity-server.git
+[submodule "proxy"]
+	path = proxy
+	url = https://github.com/rileycalhoun/continuity-proxy
