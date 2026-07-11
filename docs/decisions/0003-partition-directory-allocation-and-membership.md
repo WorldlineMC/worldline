@@ -44,7 +44,9 @@ storage_version
 
 Redis stores server presence, cached directory data, short-lived transfer state, and the live ownership lease associated with the durable assignment and epoch.
 
-Only the active coordinator may create assignments or change partition ownership. A Continuity Server must never claim authority merely because it loaded or received traffic for a chunk.
+Only the active coordinator may create assignments or change partition ownership. In the initial single-proxy topology, the Continuity Proxy holds the active coordinator role. A future highly available coordinator or leader-election design requires a separate accepted ADR.
+
+A Continuity Server must never claim authority merely because it loaded or received traffic for a chunk.
 
 The partition key is unique in SQL. Concurrent first-access attempts therefore resolve to one directory record and one initial owner through an atomic transaction or conditional insert.
 
@@ -55,7 +57,7 @@ Continuity does not preallocate partitions for the unbounded world. A logical pa
 On first use:
 
 1. The proxy calculates the partition key.
-2. The coordinator atomically creates or reads its directory record.
+2. The active coordinator atomically creates or reads its directory record.
 3. The scheduler selects an eligible Continuity Server.
 4. The selected server prepares the partition.
 5. The proxy permits entry after the partition is ready.
@@ -90,7 +92,22 @@ Graceful removal follows:
 ACTIVE -> DRAINING -> OFFLINE
 ~~~
 
-A draining server receives no new assignments, remains authoritative for its current partitions, and migrates them away. It may become offline only after it owns no partitions and has no transfer in progress.
+A draining server receives no new partition assignments and is not eligible as the destination of a new player-session handoff. Existing authoritative player sessions may continue temporarily while the server drains, but new attempts to enter its partitions from another server are delayed or rejected until ownership is moved to an eligible server or the drain is cancelled.
+
+A draining server remains authoritative for its current partitions until each migration commits. It may become OFFLINE only after all of the following are true:
+
+- It owns no partitions.
+- It owns no authoritative player sessions.
+- It has no player handoff in progress.
+- It has no partition migration in progress.
+
+### Occupied partitions during migration
+
+A partition migration may not commit while an authoritative player session remains inside that partition unless a future accepted ADR defines an atomic compound migration protocol for the partition and its player sessions.
+
+Before preparing an ordinary partition migration, the proxy stops admitting new player handoffs into that partition. Existing players must leave through normal movement and player handoff, disconnect, or use a separately defined supported evacuation procedure before the partition migration may freeze and commit.
+
+Until an explicit evacuation or compound migration protocol is accepted, graceful draining is allowed to remain blocked by an occupied partition rather than violating player or partition authority. An implementation must not silently migrate the partition out from under a player or leave the player's authoritative server serving a position in a partition it no longer owns.
 
 Unexpected failure follows:
 
@@ -98,7 +115,16 @@ Unexpected failure follows:
 ACTIVE -> SUSPECT -> FAILED
 ~~~
 
-The coordinator does not grant replacement authority until the failed owner's live lease has expired. It then commits a new owner with a higher ownership epoch. All consumers of authoritative mutations must reject work carrying an older epoch.
+The coordinator does not grant replacement authority merely because the failed owner's live lease expired. Recovery follows:
+
+1. The failed owner's live lease expires and the old epoch is fenced.
+2. The coordinator selects a recovery candidate with access to a valid durability replica or other recoverable partition state.
+3. The candidate proves it can access, load, and validate a specific recoverable storage version.
+4. The coordinator conditionally commits the new SQL owner with a higher ownership epoch and the validated storage version.
+5. The destination receives the live lease for the new epoch.
+6. Only then may the replacement begin authoritative simulation.
+
+If no candidate can prove usable recoverable state, the partition remains unavailable rather than granting authority over nonexistent, stale, or unvalidated data. All consumers of authoritative mutations must reject work carrying an older epoch.
 
 ### Partition migration
 
@@ -111,9 +137,11 @@ Moving an existing partition is an explicit state transition:
 5. The destination receives the live lease for the new epoch.
 6. The source unloads the partition and can retain only non-authoritative data.
 
+The migration may reach its freeze and commit phases only after the occupied-partition rule above has been satisfied.
+
 Membership changes never move a partition implicitly. A future automatic rebalancer must use this same migration operation rather than creating a separate ownership path.
 
-A player entering a partition owned by another server does not migrate that partition or modify the partition directory. It uses the separate player-session handoff defined by [ADR 0005](0005-player-handoff-state-machine.md).
+A player attempting to enter a partition owned by another server does not migrate that partition or modify the partition directory. It uses the separate player-session handoff defined by [ADR 0005](0005-player-handoff-state-machine.md), and the source does not authoritatively apply the remote-side position before that handoff commits.
 
 ### Failure durability
 
@@ -133,6 +161,8 @@ This ADR does not choose the physical partition-storage mechanism, journaling st
 - Live leases and ownership epochs fence stale servers.
 - Manual and future automatic rebalancing share one safe migration primitive.
 - Spatial locality can reduce cross-server boundary traffic.
+- Failed partitions cannot be reassigned until a replacement proves it has usable recoverable state.
+- Draining cannot silently strand authoritative players on an offline server.
 
 ### Costs and risks
 
@@ -141,6 +171,7 @@ This ADR does not choose the physical partition-storage mechanism, journaling st
 - Load-aware placement requires trustworthy metrics beyond player count.
 - Exact storage and crash-recovery guarantees remain unresolved.
 - Changing partition dimensions after world initialization requires a dedicated migration.
+- Graceful removal may remain blocked while players occupy partitions until a future evacuation or compound migration protocol is defined.
 
 ## Rejected alternatives
 
@@ -150,6 +181,8 @@ This ADR does not choose the physical partition-storage mechanism, journaling st
 - **Preallocate the world:** is unnecessary and cannot cover an effectively unbounded coordinate space.
 - **Allow servers to claim unowned chunks themselves:** permits races and conflicting authority.
 - **Stop a server before draining it:** risks unavailable partitions and loss of non-durable state.
+- **Commit migration while players remain inside the partition:** can leave a player's authority serving a position in world state owned by another server unless a compound protocol explicitly coordinates both authority changes.
+- **Grant replacement authority immediately after lease expiry:** can assign an owner that has no valid world state to serve.
 
 ## References
 
@@ -165,9 +198,13 @@ An implementation conforms to this decision only if:
 
 - Partition identities are independent of server identities.
 - Membership changes do not implicitly change ownership.
-- Every ownership change is serialized by the coordinator and increments the fencing epoch.
+- Every ownership change is serialized by the active coordinator and increments the fencing epoch.
+- The initial single-proxy topology assigns the coordinator role explicitly to the Continuity Proxy unless a later ADR supersedes that design.
 - SQL retains the durable directory while Redis represents live leases and cached state.
 - Only the recorded live owner can generate or persist chunks.
 - New partitions are materialized atomically.
-- Graceful removal drains all partitions before shutdown.
-- Migration and failure tests cover duplicate requests, concurrent first access, expired leases, stale epochs, coordinator restarts, and source or destination failure at every transition.
+- Graceful removal drains all partitions and authoritative player sessions before shutdown.
+- A draining server is not selected as the destination for a new player-session handoff.
+- An occupied partition does not migrate unless a future accepted ADR defines an atomic compound migration protocol.
+- Unexpected-failure recovery proves access to usable recoverable state before replacement ownership is committed.
+- Migration and failure tests cover duplicate requests, concurrent first access, occupied partitions, expired leases, stale epochs, missing replicas, invalid storage versions, coordinator restarts, and source or destination failure at every transition.
