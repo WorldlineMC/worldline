@@ -14,8 +14,10 @@ The Continuity Proxy is derived from Velocity. It:
 
 - Owns the player-facing connection.
 - Tracks the backend currently serving each player.
+- Owns the authoritative live player-session record for each connected client in the initial single-proxy topology.
 - Routes players according to their position and the current partition map.
-- Coordinates seamless transfers between Continuity Servers.
+- Coordinates seamless player handoffs between Continuity Servers.
+- Holds the active partition-coordinator role in the initial single-proxy topology.
 
 ### Continuity Server
 
@@ -26,13 +28,17 @@ A Continuity Server is derived from Paper. It:
 - Participates in transfer preparation, commit, abort, and recovery.
 - Maintains read-only boundary projections needed by its local players.
 
+### Coordinator role
+
+The active coordinator serializes partition materialization, allocation, migration, and membership-driven ownership changes. In the initial single-proxy topology, the Continuity Proxy holds this role. A future highly available coordinator or leader-election design requires a separate accepted ADR.
+
 ### Redis
 
 Redis provides distributed coordination, short-lived state, leases, notifications, and retryable asynchronous messaging. Redis data is not the permanent source of truth.
 
 ### SQL database
 
-The SQL database stores permanent state and durable records that must survive the loss or replacement of Redis and individual Continuity processes. This includes the authoritative partition directory and sticky server assignments.
+The SQL database stores permanent control-plane state and durable records that must survive the loss or replacement of Redis and individual Continuity processes. This includes the authoritative partition directory, sticky server assignments, and durable audit records. Ordinary chunk, entity, and point-of-interest world data is stored owner-locally according to ADR 0004 rather than using SQL as the primary blob store.
 
 ## Partition directory and membership
 
@@ -40,9 +46,9 @@ The world is divided into fixed rectangular partitions containing whole chunks. 
 
 The SQL partition directory stores each materialized partition's durable assignment and ownership epoch. Redis stores the corresponding live lease, cached directory data, server presence, and short-lived coordination state.
 
-Unexplored parts of the world do not require preallocated directory rows. A partition is materialized atomically when first approached, assigned to an active server, and then remains sticky until the coordinator explicitly migrates it.
+Unexplored parts of the world do not require preallocated directory rows. A partition is materialized atomically by the active coordinator when first approached, assigned to an active server, and then remains sticky until the coordinator explicitly migrates it.
 
-Adding a server does not recalculate existing ownership. The server becomes eligible for new allocations and may receive existing partitions through gradual, rate-limited rebalancing. Graceful removal drains and migrates every owned partition before shutdown. Unexpected failure requires lease expiry and a higher ownership epoch before replacement authority is granted.
+Adding a server does not recalculate existing ownership. The server becomes eligible for new allocations and may receive existing partitions through gradual, rate-limited rebalancing. Graceful removal drains and migrates every owned partition before shutdown. A draining server is not eligible to receive new player-session handoffs into its partitions, and it may become offline only after it owns no partitions, has no authoritative player sessions, and has no transfer or migration in progress. Unexpected failure requires lease expiry, recoverable partition state, and a higher ownership epoch before replacement authority is granted.
 
 ## Storage and boundary visibility
 
@@ -50,15 +56,17 @@ The authoritative owner stores its partition's writable world files locally. Dur
 
 Durability replication is distinct from live boundary projection. A server whose local players can see into a neighboring partition subscribes to a visibility halo containing the required read-only chunks, entities, players, block changes, and visible effects.
 
-Remote entity projections are presentation objects. They do not tick, run AI or physics, persist data, or gain authority. A player remains visible across a server boundary whenever that player would be tracked on one Paper server. Stable cluster identity and viewer-side protocol identity prevent a visible despawn and respawn during handoff.
+Remote entity projections are presentation objects. They do not tick, run AI or physics, persist data, or gain authority. A player remains visible across a server boundary whenever that player would be tracked on one Paper server. Stable cluster identity and viewer-side protocol identity prevent a visible despawn and respawn during handoff. Player projection updates are fenced by player-session epoch; partition and non-player entity updates use the relevant partition ownership epoch or equivalent authority token.
 
-Interactions with projected remote state are routed to the authoritative owner, which validates and applies them. Ordinary chunk boundaries do not trigger transfers; only configured partition boundaries do.
+Interactions with projected remote state are routed to the authoritative owner, which validates and applies them. Retryable interactions carry stable operation identifiers so duplicate delivery cannot apply the same authoritative action twice. Ordinary chunk boundaries do not trigger transfers; only configured partition boundaries do.
 
 ## Player handoff
 
-A player crossing a partition boundary triggers a player handoff, not a partition migration. The destination partition keeps its existing owner and the durable partition directory does not change.
+A player attempting to cross a partition boundary triggers a player handoff, not a partition migration. The destination partition keeps its existing owner and the durable partition directory does not change.
 
-The Continuity Proxy retains the client connection and coordinates an explicit prepare, freeze, snapshot-stage, commit, activate, and cleanup state machine. A player-session epoch fences the player's live authority independently from the destination partition's ownership epoch.
+The destination may be prepared before the player reaches the boundary. When a movement input would cross into a partition owned by another server, the source does not authoritatively apply the remote-side position. The proxy freezes and snapshots the source session, commits player-session authority to the destination, and releases the held crossing input to the destination only after commit.
+
+The Continuity Proxy retains the client connection and coordinates an explicit prepare, freeze, snapshot-stage, commit, activate, and cleanup state machine. The proxy's live player-session record stores the current authoritative server, player-session epoch, active transfer identifier, and current handoff phase. In the initial single-proxy topology, the conditional transition of this record is the atomic handoff commit.
 
 Before commit, the source is the sole player authority and the destination may only prepare. After commit, the destination is the sole authority and the source cannot resume its previous epoch. Gameplay packets are routed or briefly buffered according to the current phase; protocol-control packets are handled separately and are never blindly replayed.
 
@@ -80,6 +88,9 @@ The destination applies a versioned final player-state snapshot before buffered 
 12. Player-session authority has its own epoch and exactly one authoritative server.
 13. A destination cannot create authoritative player side effects before handoff commit.
 14. A source can resume after a pre-commit abort, but can never resume an epoch that has committed to another server.
+15. A movement input that would cross into a remote-owned partition is not authoritatively applied by the source; it is processed by the destination only after player-session authority commits.
+16. Player projection updates are rejected when they carry a stale player-session epoch.
+17. A partition migration cannot commit while authoritative player sessions remain inside that partition unless a future accepted ADR defines an atomic compound migration protocol.
 
 ## Undecided details
 
@@ -93,5 +104,6 @@ This document intentionally does not yet choose:
 - Complete mechanics for cross-boundary collisions, projectiles, explosions, fluids, redstone, or mob AI
 - Plugin API behavior for projected remote players and entities
 - The deployment topology for high availability
+- An atomic compound protocol for migrating an occupied partition together with its player sessions
 
 Those choices require separate ADRs.
