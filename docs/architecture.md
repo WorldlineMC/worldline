@@ -72,6 +72,18 @@ Before commit, the source is the sole player authority and the destination may o
 
 The destination applies a versioned final player-state snapshot before buffered gameplay input is released. The source converts its tracked player into a boundary projection for nearby observers without an unnecessary client-visible removal.
 
+## Plugin compatibility
+
+Continuity targets transparent compatibility with existing unmodified Bukkit, Spigot, and Paper plugins for behavior inside the supported compatibility boundary defined by ADR 0006. To a compatible plugin, physical Continuity nodes are an implementation detail and the cluster behaves as one logical Paper server.
+
+Supported state-changing API calls execute against the current authoritative owner exactly once and then propagate resulting committed state to interested nodes. A plugin mutation targeting a remote player, entity, chunk, block, or other projection is routed to authority rather than mutating an independent local copy.
+
+Each plugin's conventional data directory is one logical cluster-wide namespace. Committed configuration and ordinary plugin-data file changes become visible across the cluster with defined ordering, conflict, and recovery semantics. File-backed databases and special storage engines require storage-aware handling rather than blind file copying.
+
+Plugin lifecycle, command, event, and scheduler behavior must preserve one-logical-server semantics. Physical plugin copies must not unintentionally multiply scheduled work, lifecycle side effects, commands, authoritative events, or external effects solely because the cluster contains multiple nodes.
+
+This compatibility runtime is a late-stage 1.0 requirement and is not required for the initial vertical slice. Earlier ownership, storage, handoff, scheduler, and projection designs must preserve a viable path to the ADR 0006 contract.
+
 ## Non-negotiable invariants
 
 1. A player or partition has at most one authoritative Continuity Server at any instant.
@@ -91,6 +103,10 @@ The destination applies a versioned final player-state snapshot before buffered 
 15. A movement input that would cross into a remote-owned partition is not authoritatively applied by the source; it is processed by the destination only after player-session authority commits.
 16. Player projection updates are rejected when they carry a stale player-session epoch.
 17. A partition migration cannot commit while authoritative player sessions remain inside that partition unless a future accepted ADR defines an atomic compound migration protocol.
+18. A supported plugin mutation has one logical authoritative effect regardless of which physical node receives the call.
+19. Managed plugin data paths do not silently diverge into unrelated node-local authoritative histories.
+20. Physical plugin instances must not multiply logical lifecycle, command, scheduler, event, or external side effects solely because the cluster has multiple nodes.
+21. Plugin mutations against remote projections route to the current authority and are fenced by the relevant epoch or equivalent authority token.
 
 ## Undecided details
 
@@ -102,7 +118,7 @@ This document intentionally does not yet choose:
 - The wire protocol, packet classification, buffer limits, and timeout budgets used by direct proxy/server control connections
 - Production behavior for handoffs involving vehicles, open containers, sleeping, portals, or other complex player states
 - Complete mechanics for cross-boundary collisions, projectiles, explosions, fluids, redstone, or mob AI
-- Plugin API behavior for projected remote players and entities
+- The exact plugin compatibility runtime, remote-object proxy mechanism, managed plugin-filesystem implementation, scheduler coordination model, or compatibility-adapter framework
 - The deployment topology for high availability
 - An atomic compound protocol for migrating an occupied partition together with its player sessions
 
