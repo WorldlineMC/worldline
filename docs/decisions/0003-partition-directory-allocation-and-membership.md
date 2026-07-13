@@ -6,7 +6,7 @@
 
 ## Context
 
-Continuity worlds may expand indefinitely as new chunks generate, while operators must be able to add capacity or remove servers without changing the logical world. Deriving ownership directly from the current server list would make membership changes silently remap live world state and trigger uncontrolled migrations.
+Worldline worlds may expand indefinitely as new chunks generate, while operators must be able to add capacity or remove servers without changing the logical world. Deriving ownership directly from the current server list would make membership changes silently remap live world state and trigger uncontrolled migrations.
 
 The system therefore needs stable partition identities, a durable ownership directory, safe first-use allocation, and explicit server lifecycle behavior.
 
@@ -14,7 +14,7 @@ The system therefore needs stable partition identities, a durable ownership dire
 
 ### Partition identity
 
-Continuity divides each world and dimension into fixed rectangular partitions containing whole chunks.
+Worldline divides each world and dimension into fixed rectangular partitions containing whole chunks.
 
 A partition is identified independently of any server by its world, dimension, and grid coordinates. Its exact dimensions are configurable rather than hardcoded into the network protocol. Changing the dimensions of an initialized world requires an explicit future migration procedure.
 
@@ -44,21 +44,21 @@ storage_version
 
 Redis stores server presence, cached directory data, short-lived transfer state, and the live ownership lease associated with the durable assignment and epoch.
 
-Only the active coordinator may create assignments or change partition ownership. In the initial single-proxy topology, the Continuity Proxy holds the active coordinator role. A future highly available coordinator or leader-election design requires a separate accepted ADR.
+Only the active coordinator may create assignments or change partition ownership. In the initial single-proxy topology, the Worldline Proxy holds the active coordinator role. A future highly available coordinator or leader-election design requires a separate accepted ADR.
 
-A Continuity Server must never claim authority merely because it loaded or received traffic for a chunk.
+A Worldline Server must never claim authority merely because it loaded or received traffic for a chunk.
 
 The partition key is unique in SQL. Concurrent first-access attempts therefore resolve to one directory record and one initial owner through an atomic transaction or conditional insert.
 
 ### Lazy materialization and chunk generation
 
-Continuity does not preallocate partitions for the unbounded world. A logical partition remains virtual until something first approaches or requests data from it.
+Worldline does not preallocate partitions for the unbounded world. A logical partition remains virtual until something first approaches or requests data from it.
 
 On first use:
 
 1. The proxy calculates the partition key.
 2. The active coordinator atomically creates or reads its directory record.
-3. The scheduler selects an eligible Continuity Server.
+3. The scheduler selects an eligible Worldline Server.
 4. The selected server prepares the partition.
 5. The proxy permits entry after the partition is ready.
 
@@ -147,7 +147,7 @@ A player attempting to enter a partition owned by another server does not migrat
 
 Graceful migration can preserve current state, but recovery after an unexpected process or machine failure is limited by the last durable or replicated state.
 
-This ADR does not choose the physical partition-storage mechanism, journaling strategy, replication strategy, recovery point objective, or recovery time objective. Those require a separate decision. Continuity must not claim zero-data-loss failover unless the selected persistence design actually provides it.
+This ADR does not choose the physical partition-storage mechanism, journaling strategy, replication strategy, recovery point objective, or recovery time objective. Those require a separate decision. Worldline must not claim zero-data-loss failover unless the selected persistence design actually provides it.
 
 [ADR 0004](0004-owner-local-storage-and-boundary-visibility.md) subsequently selects owner-local writable files with separate durability replication, while leaving the exact replication target, journal format, synchronization mode, and recovery objectives undecided.
 
@@ -199,7 +199,7 @@ An implementation conforms to this decision only if:
 - Partition identities are independent of server identities.
 - Membership changes do not implicitly change ownership.
 - Every ownership change is serialized by the active coordinator and increments the fencing epoch.
-- The initial single-proxy topology assigns the coordinator role explicitly to the Continuity Proxy unless a later ADR supersedes that design.
+- The initial single-proxy topology assigns the coordinator role explicitly to the Worldline Proxy unless a later ADR supersedes that design.
 - SQL retains the durable directory while Redis represents live leases and cached state.
 - Only the recorded live owner can generate or persist chunks.
 - New partitions are materialized atomically.

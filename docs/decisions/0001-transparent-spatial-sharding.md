@@ -9,9 +9,9 @@ A large survival world can place more simulation work on a single Minecraft serv
 
 ## Decision
 
-Continuity distributes one logical world across multiple Continuity Servers using spatial partitions.
+Worldline distributes one logical world across multiple Worldline Servers using spatial partitions.
 
-The Continuity Proxy keeps the player-facing connection and routes each player to the Continuity Server authoritative for the player's current position. When a movement input would cross an ownership boundary, Continuity transfers backend authority without requiring a reconnect or exposing a loading screen or server transition to the client. The source server does not authoritatively apply a position inside the remote-owned partition before the player-session handoff commits; the crossing input is processed by the destination only after it becomes authoritative.
+The Worldline Proxy keeps the player-facing connection and routes each player to the Worldline Server authoritative for the player's current position. When a movement input would cross an ownership boundary, Worldline transfers backend authority without requiring a reconnect or exposing a loading screen or server transition to the client. The source server does not authoritatively apply a position inside the remote-owned partition before the player-session handoff commits; the crossing input is processed by the destination only after it becomes authoritative.
 
 Every player and partition has at most one authoritative server at a time. Authority changes use an epoch or equivalent fencing token so delayed work from a previous owner cannot mutate current state.
 

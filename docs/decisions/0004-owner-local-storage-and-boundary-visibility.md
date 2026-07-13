@@ -6,7 +6,7 @@
 
 ## Context
 
-Continuity needs fast world I/O, exclusive authority, safe partition migration, and recovery after owner failure. It must also make server boundaries invisible to players.
+Worldline needs fast world I/O, exclusive authority, safe partition migration, and recovery after owner failure. It must also make server boundaries invisible to players.
 
 These requirements involve two different forms of replication:
 
@@ -21,15 +21,15 @@ Conflating the two would be unsafe. A boundary projection contains only the stat
 
 ### Owner-local authoritative storage
 
-The authoritative Continuity Server stores its partition's writable world data on local storage using Paper's native storage formats where practical.
+The authoritative Worldline Server stores its partition's writable world data on local storage using Paper's native storage formats where practical.
 
-Exactly one server may write a partition's world data. Partition boundaries and storage layout must ensure that two owners never write the same physical storage file. If a native file would span multiple logical partitions, Continuity must adjust the partition layout or isolate writes through a storage adapter before those partitions can have different owners.
+Exactly one server may write a partition's world data. Partition boundaries and storage layout must ensure that two owners never write the same physical storage file. If a native file would span multiple logical partitions, Worldline must adjust the partition layout or isolate writes through a storage adapter before those partitions can have different owners.
 
 SQL stores directory and metadata state rather than serving as the primary blob store for ordinary chunk, entity, or point-of-interest data.
 
 ### Durability replication
 
-An owner replicates a consistent base snapshot and subsequent changes to one or more read-only durability targets. A target may be another Continuity Server or a future durable storage service, but it cannot tick, modify, or serve the partition as authoritative without a coordinator-approved ownership change and newer epoch.
+An owner replicates a consistent base snapshot and subsequent changes to one or more read-only durability targets. A target may be another Worldline Server or a future durable storage service, but it cannot tick, modify, or serve the partition as authoritative without a coordinator-approved ownership change and newer epoch.
 
 Migration uses the following shape:
 
@@ -41,11 +41,11 @@ Migration uses the following shape:
 6. Commit the new owner and ownership epoch.
 7. Start the destination and retire the old writable copy.
 
-The exact snapshot format, journal format, replication target, replication factor, synchronous or asynchronous acknowledgement policy, recovery point objective, and recovery time objective remain undecided. Continuity must expose the actual protection state and must not claim zero-data-loss recovery unless a later accepted decision provides it.
+The exact snapshot format, journal format, replication target, replication factor, synchronous or asynchronous acknowledgement policy, recovery point objective, and recovery time objective remain undecided. Worldline must expose the actual protection state and must not claim zero-data-loss recovery unless a later accepted decision provides it.
 
 ### Visibility halos
 
-Each Continuity Server maintains an interest-based visibility halo for its local players. When that halo overlaps a partition owned by another server, the viewer server subscribes to the authoritative owner for the required projected state.
+Each Worldline Server maintains an interest-based visibility halo for its local players. When that halo overlaps a partition owned by another server, the viewer server subscribes to the authoritative owner for the required projected state.
 
 The halo covers the configured client view distance, entity-tracking distances, and any additional margin required by supported interactions. It is calculated from current configuration rather than hardcoded.
 
@@ -94,7 +94,7 @@ A projection:
 - Carries sufficient ordering information to reject stale or out-of-order updates
 - Is discarded or resynchronized when its stream becomes stale
 
-Remote projections are not exposed as ordinary mutable Paper entities. A future Continuity API may expose read-only remote-player and remote-entity views to plugins.
+Remote projections are not exposed as ordinary mutable Paper entities. A future Worldline API may expose read-only remote-player and remote-entity views to plugins.
 
 Entities use a stable cluster identity independent of their current owner. Viewer-facing protocol identities remain stable across a handoff whenever the entity stays visible, preventing an unnecessary despawn and respawn.
 
@@ -148,7 +148,7 @@ Direct player interactions across a boundary must use this ownership route. Comp
 
 ### Costs and risks
 
-- Continuity must modify Paper's chunk and entity tracking paths.
+- Worldline must modify Paper's chunk and entity tracking paths.
 - Projection state requires versioning, resynchronization, backpressure, and stale-stream handling.
 - Stable viewer-facing entity identity requires protocol-aware bookkeeping across handoffs.
 - Plugins cannot safely treat projected players as ordinary mutable local players.

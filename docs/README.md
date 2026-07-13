@@ -1,6 +1,6 @@
-# Continuity design documentation
+# Worldline design documentation
 
-This directory records Continuity's architecture and accepted design decisions. It is the project's source of truth for architectural intent.
+This directory records Worldline's architecture and accepted design decisions. It is the project's source of truth for architectural intent.
 
 If an implementation conflicts with an accepted decision, the implementation is non-conforming until either it is corrected or a new decision explicitly supersedes the old one.
 

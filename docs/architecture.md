@@ -4,24 +4,24 @@
 
 ## Goal
 
-Continuity presents one logical Minecraft server and world while distributing simulation work across multiple backend server processes. A player may move between backend servers without a reconnect, loading screen, or other client-visible server transition.
+Worldline presents one logical Minecraft server and world while distributing simulation work across multiple backend server processes. A player may move between backend servers without a reconnect, loading screen, or other client-visible server transition.
 
 ## Components
 
-### Continuity Proxy
+### Worldline Proxy
 
-The Continuity Proxy is derived from Velocity. It:
+The Worldline Proxy is derived from Velocity. It:
 
 - Owns the player-facing connection.
 - Tracks the backend currently serving each player.
 - Owns the authoritative live player-session record for each connected client in the initial single-proxy topology.
 - Routes players according to their position and the current partition map.
-- Coordinates seamless player handoffs between Continuity Servers.
+- Coordinates seamless player handoffs between Worldline Servers.
 - Holds the active partition-coordinator role in the initial single-proxy topology.
 
-### Continuity Server
+### Worldline Server
 
-A Continuity Server is derived from Paper. It:
+A Worldline Server is derived from Paper. It:
 
 - Simulates the partitions currently assigned to it.
 - Acts as the sole authority for players and game state committed to those partitions.
@@ -30,7 +30,7 @@ A Continuity Server is derived from Paper. It:
 
 ### Coordinator role
 
-The active coordinator serializes partition materialization, allocation, migration, and membership-driven ownership changes. In the initial single-proxy topology, the Continuity Proxy holds this role. A future highly available coordinator or leader-election design requires a separate accepted ADR.
+The active coordinator serializes partition materialization, allocation, migration, and membership-driven ownership changes. In the initial single-proxy topology, the Worldline Proxy holds this role. A future highly available coordinator or leader-election design requires a separate accepted ADR.
 
 ### Redis
 
@@ -38,7 +38,7 @@ Redis provides distributed coordination, short-lived state, leases, notification
 
 ### SQL database
 
-The SQL database stores permanent control-plane state and durable records that must survive the loss or replacement of Redis and individual Continuity processes. This includes the authoritative partition directory, sticky server assignments, and durable audit records. Ordinary chunk, entity, and point-of-interest world data is stored owner-locally according to ADR 0004 rather than using SQL as the primary blob store.
+The SQL database stores permanent control-plane state and durable records that must survive the loss or replacement of Redis and individual Worldline processes. This includes the authoritative partition directory, sticky server assignments, and durable audit records. Ordinary chunk, entity, and point-of-interest world data is stored owner-locally according to ADR 0004 rather than using SQL as the primary blob store.
 
 ## Partition directory and membership
 
@@ -52,7 +52,7 @@ Adding a server does not recalculate existing ownership. The server becomes elig
 
 ## Storage and boundary visibility
 
-The authoritative owner stores its partition's writable world files locally. Durability replication copies snapshots and subsequent changes to read-only targets for migration and recovery. No two Continuity Servers may write the same physical world-storage file.
+The authoritative owner stores its partition's writable world files locally. Durability replication copies snapshots and subsequent changes to read-only targets for migration and recovery. No two Worldline Servers may write the same physical world-storage file.
 
 Durability replication is distinct from live boundary projection. A server whose local players can see into a neighboring partition subscribes to a visibility halo containing the required read-only chunks, entities, players, block changes, and visible effects.
 
@@ -66,7 +66,7 @@ A player attempting to cross a partition boundary triggers a player handoff, not
 
 The destination may be prepared before the player reaches the boundary. When a movement input would cross into a partition owned by another server, the source does not authoritatively apply the remote-side position. The proxy freezes and snapshots the source session, commits player-session authority to the destination, and releases the held crossing input to the destination only after commit.
 
-The Continuity Proxy retains the client connection and coordinates an explicit prepare, freeze, snapshot-stage, commit, activate, and cleanup state machine. The proxy's live player-session record stores the current authoritative server, player-session epoch, active transfer identifier, and current handoff phase. In the initial single-proxy topology, the conditional transition of this record is the atomic handoff commit.
+The Worldline Proxy retains the client connection and coordinates an explicit prepare, freeze, snapshot-stage, commit, activate, and cleanup state machine. The proxy's live player-session record stores the current authoritative server, player-session epoch, active transfer identifier, and current handoff phase. In the initial single-proxy topology, the conditional transition of this record is the atomic handoff commit.
 
 Before commit, the source is the sole player authority and the destination may only prepare. After commit, the destination is the sole authority and the source cannot resume its previous epoch. Gameplay packets are routed or briefly buffered according to the current phase; protocol-control packets are handled separately and are never blindly replayed.
 
@@ -74,7 +74,7 @@ The destination applies a versioned final player-state snapshot before buffered 
 
 ## Plugin compatibility
 
-Continuity targets transparent compatibility with existing unmodified Bukkit, Spigot, and Paper plugins for behavior inside the supported compatibility boundary defined by ADR 0006. To a compatible plugin, physical Continuity nodes are an implementation detail and the cluster behaves as one logical Paper server.
+Worldline targets transparent compatibility with existing unmodified Bukkit, Spigot, and Paper plugins for behavior inside the supported compatibility boundary defined by ADR 0006. To a compatible plugin, physical Worldline nodes are an implementation detail and the cluster behaves as one logical Paper server.
 
 Supported state-changing API calls execute against the current authoritative owner exactly once and then propagate resulting committed state to interested nodes. A plugin mutation targeting a remote player, entity, chunk, block, or other projection is routed to authority rather than mutating an independent local copy.
 
@@ -86,7 +86,7 @@ This compatibility runtime is a late-stage 1.0 requirement and is not required f
 
 ## Non-negotiable invariants
 
-1. A player or partition has at most one authoritative Continuity Server at any instant.
+1. A player or partition has at most one authoritative Worldline Server at any instant.
 2. Authority changes are fenced by an ownership epoch or equivalent monotonic token. A stale owner cannot commit mutations after authority has moved.
 3. The source remains authoritative until a transfer commits. Preparing a destination does not grant it authority.
 4. A failed transfer must resolve to a known owner or safely stop progress; it must never create two owners.

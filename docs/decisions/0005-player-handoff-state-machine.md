@@ -6,11 +6,11 @@
 
 ## Context
 
-Continuity's defining behavior is moving a player between authoritative backend servers without disconnecting the client, displaying a loading screen, losing player state, or revealing the backend transition to nearby players.
+Worldline's defining behavior is moving a player between authoritative backend servers without disconnecting the client, displaying a loading screen, losing player state, or revealing the backend transition to nearby players.
 
 A player handoff is not a partition migration. During a player handoff, the source and destination partitions retain their existing owners. Only the player's live simulation authority and backend packet route change.
 
-The handoff begins when a player approaches or attempts to cross into a partition owned by another Continuity Server. The source must not authoritatively apply a position inside the remote-owned partition before destination authority commits, because the source does not own that world state and boundary projections do not run authoritative physics or collision.
+The handoff begins when a player approaches or attempts to cross into a partition owned by another Worldline Server. The source must not authoritatively apply a position inside the remote-owned partition before destination authority commits, because the source does not own that world state and boundary projections do not run authoritative physics or collision.
 
 The protocol must define one commit point, prevent dual authority, preserve packet ordering, fence stale messages, recover safely from failures in every phase, and maintain remote projections for observers.
 
@@ -40,14 +40,14 @@ Only one transfer may be active for a player. Duplicate commands for the same tr
 
 ### Coordinator and preconditions
 
-The Continuity Proxy retains the client-facing connection and coordinates the handoff.
+The Worldline Proxy retains the client-facing connection and coordinates the handoff.
 
 Before preparing a destination, the proxy verifies that:
 
 - The destination server still owns the destination partition at the expected epoch.
 - The destination server is healthy, active, and not draining.
 - The destination can load the target chunk and surrounding visibility data.
-- The source and destination support compatible Continuity protocols.
+- The source and destination support compatible Worldline protocols.
 - Registry, dimension, and client-facing configuration are compatible with a same-world transparent transfer.
 - No other transfer is active for the player.
 
@@ -55,7 +55,7 @@ A partition migration involving the source or destination must either wait for t
 
 ### Live player-session record and commit authority
 
-In the initial single-proxy topology, the Continuity Proxy owns the authoritative live player-session record for every connected client. That record contains at least:
+In the initial single-proxy topology, the Worldline Proxy owns the authoritative live player-session record for every connected client. That record contains at least:
 
 ~~~text
 player_uuid
@@ -201,8 +201,8 @@ The first implementation validates this state machine before introducing Redis, 
 
 The vertical slice uses:
 
-- One Continuity Proxy process
-- Two Continuity Server processes
+- One Worldline Proxy process
+- Two Worldline Server processes
 - One world and dimension
 - One manually configured partition boundary
 - An in-memory ownership map
@@ -286,7 +286,7 @@ The vertical slice may use the simplest direct experimental transport. Its resul
 An implementation conforms to this decision only if:
 
 - A player has one authoritative server and a separately fenced player-session epoch.
-- The Continuity Proxy owns a defined authoritative live player-session record in the initial single-proxy topology.
+- The Worldline Proxy owns a defined authoritative live player-session record in the initial single-proxy topology.
 - The destination remains non-authoritative until an atomic conditional commit of that live session record.
 - The source cannot resume an epoch after ownership has committed elsewhere.
 - A movement input that would cross into a remote-owned partition is not authoritatively applied by the source.

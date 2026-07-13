@@ -1,6 +1,6 @@
 [submodule "server"]
 	path = server
-	url = https://github.com/rileycalhoun/continuity-server.git
+	url = https://github.com/WorldlineMC/worldline-server.git
 [submodule "proxy"]
 	path = proxy
-	url = https://github.com/rileycalhoun/continuity-proxy
+	url = https://github.com/WorldlineMC/worldline-proxy.git

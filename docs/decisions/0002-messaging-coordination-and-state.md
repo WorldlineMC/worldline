@@ -5,13 +5,13 @@
 
 ## Context
 
-Continuity needs low-latency coordination, synchronous transfer commands, best-effort notifications, retryable asynchronous work, and permanent storage. These workloads have different delivery and durability requirements and must not be forced through one messaging primitive.
+Worldline needs low-latency coordination, synchronous transfer commands, best-effort notifications, retryable asynchronous work, and permanent storage. These workloads have different delivery and durability requirements and must not be forced through one messaging primitive.
 
-Kafka provides a durable distributed event log, but its operational and semantic model is not required for Continuity's latency-sensitive control plane. Redis is already useful for short-lived distributed state, but Redis Pub/Sub alone can permanently lose messages when a subscriber is unavailable.
+Kafka provides a durable distributed event log, but its operational and semantic model is not required for Worldline's latency-sensitive control plane. Redis is already useful for short-lived distributed state, but Redis Pub/Sub alone can permanently lose messages when a subscriber is unavailable.
 
 ## Decision
 
-Continuity uses different mechanisms according to the required semantics:
+Worldline uses different mechanisms according to the required semantics:
 
 | Workload | Mechanism |
 | --- | --- |
@@ -45,7 +45,7 @@ player_state_version
 
 SQL is the permanent source of truth for durable control-plane metadata, including partition assignments, sticky ownership, and audit records. Redis may accelerate and coordinate operations, but loss of Redis must result in safe recovery or loss of availability rather than conflicting authority or duplicated permanent state. SQL is not the primary blob store for ordinary chunk, entity, or point-of-interest world data; that data follows ADR 0004.
 
-Kafka is not a required Continuity dependency. A future optional integration may export telemetry or domain events to Kafka without placing Kafka in the player-transfer path.
+Kafka is not a required Worldline dependency. A future optional integration may export telemetry or domain events to Kafka without placing Kafka in the player-transfer path.
 
 Ordinary per-tick movement is processed by the proxy and authoritative server rather than being published through Redis Streams, Redis Pub/Sub, or Kafka.
 
@@ -55,7 +55,7 @@ Ordinary per-tick movement is processed by the proxy and authoritative server ra
 
 - Latency-sensitive request/response traffic avoids broker queues and consumer lag.
 - Best-effort and reliable workloads have explicit, different semantics.
-- Continuity does not require operators to deploy Kafka for the core runtime.
+- Worldline does not require operators to deploy Kafka for the core runtime.
 - Durable control-plane state remains separate from temporary coordination state and owner-local world storage.
 
 ### Costs and risks
