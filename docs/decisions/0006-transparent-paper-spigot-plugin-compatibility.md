@@ -6,11 +6,11 @@
 
 ## Context
 
-Continuity presents multiple backend processes as one logical Minecraft server. Existing Bukkit, Spigot, and Paper plugins are overwhelmingly written with the assumption that there is one server process, one logical world, one player registry, one scheduler, one plugin data directory, and one authoritative copy of mutable game state.
+Worldline presents multiple backend processes as one logical Minecraft server. Existing Bukkit, Spigot, and Paper plugins are overwhelmingly written with the assumption that there is one server process, one logical world, one player registry, one scheduler, one plugin data directory, and one authoritative copy of mutable game state.
 
 A naive distributed implementation breaks that assumption in several ways:
 
-- The same plugin may be loaded on multiple physical Continuity Servers.
+- The same plugin may be loaded on multiple physical Worldline Servers.
 - A scheduled task or lifecycle callback may run once per process instead of once per logical server.
 - A player, entity, chunk, or world object may be authoritative on another server.
 - A plugin may mutate a local projection even though another server owns the real state.
@@ -18,36 +18,36 @@ A naive distributed implementation breaks that assumption in several ways:
 - Persistent Data Containers may move with players, entities, chunks, or worlds across ownership boundaries.
 - A player handoff may move live authority while plugins continue to retain references or issue mutations.
 
-Continuity's product goal is not merely to provide a new distributed plugin API. Existing, unmodified Paper and Spigot plugins should work wherever technically possible and should observe the same logical server model they were written for.
+Worldline's product goal is not merely to provide a new distributed plugin API. Existing, unmodified Paper and Spigot plugins should work wherever technically possible and should observe the same logical server model they were written for.
 
 This requirement is expected to be implemented late in development, near the 1.0 milestone, but it is an architectural constraint immediately. Earlier implementation work must not make transparent compatibility impossible without a redesign.
 
-Absolute compatibility with arbitrary JVM code cannot be guaranteed. A plugin can bypass Bukkit and Paper entirely by writing to arbitrary filesystem paths, opening sockets, connecting to external databases, using JNI, depending on process-local static state, modifying server internals through reflection, or performing other side effects outside Continuity's observable compatibility boundary. This ADR therefore defines a strong compatibility contract and an explicit boundary rather than making an untestable promise.
+Absolute compatibility with arbitrary JVM code cannot be guaranteed. A plugin can bypass Bukkit and Paper entirely by writing to arbitrary filesystem paths, opening sockets, connecting to external databases, using JNI, depending on process-local static state, modifying server internals through reflection, or performing other side effects outside Worldline's observable compatibility boundary. This ADR therefore defines a strong compatibility contract and an explicit boundary rather than making an untestable promise.
 
 ## Decision
 
 ### Compatibility goal
 
-For a plugin targeting the Continuity-supported Paper version and using supported Bukkit, Spigot, or Paper contracts, Continuity MUST aim to make the unmodified plugin behave as though it were running on one conventional Paper server.
+For a plugin targeting the Worldline-supported Paper version and using supported Bukkit, Spigot, or Paper contracts, Worldline MUST aim to make the unmodified plugin behave as though it were running on one conventional Paper server.
 
-The physical distribution of players, worlds, chunks, entities, plugin execution, and storage across Continuity processes MUST remain an implementation detail unless a plugin explicitly opts into Continuity-specific APIs.
+The physical distribution of players, worlds, chunks, entities, plugin execution, and storage across Worldline processes MUST remain an implementation detail unless a plugin explicitly opts into Worldline-specific APIs.
 
 The default compatibility target is:
 
-> One logical server, one logical plugin installation, one authoritative mutation, and one externally visible result, regardless of how many Continuity processes participate in producing that result.
+> One logical server, one logical plugin installation, one authoritative mutation, and one externally visible result, regardless of how many Worldline processes participate in producing that result.
 
 This is a 1.0 product requirement. It is not required for the initial vertical slice described by ADR 0005, but accepted changes before 1.0 MUST preserve a viable path to it.
 
 ### Supported compatibility boundary
 
-Transparent compatibility applies to behavior Continuity can observe and control, including:
+Transparent compatibility applies to behavior Worldline can observe and control, including:
 
 - Supported Bukkit, Spigot, and Paper API calls.
 - Plugin lifecycle, command, event, and scheduler integration points exposed by the supported server API.
 - Files located inside the plugin's conventional data directory returned by `Plugin#getDataFolder()`.
 - Persistent Data Containers attached to supported worlds, chunks, entities, block entities, players, items, and other persistent data holders.
 - Server-managed world, player, entity, inventory, scoreboard, metadata, and offline-player state reachable through supported APIs.
-- Continuity-owned player handoff, partition ownership, projection, replication, and recovery paths.
+- Worldline-owned player handoff, partition ownership, projection, replication, and recovery paths.
 
 The following are outside the unconditional transparent-compatibility guarantee unless a dedicated adapter or later ADR brings them inside it:
 
@@ -55,13 +55,13 @@ The following are outside the unconditional transparent-compatibility guarantee 
 - External databases, caches, brokers, web services, sockets, or other network side effects directly owned by a plugin.
 - JNI or native libraries with process-local assumptions.
 - Unsupported NMS internals, reflection into implementation details, bytecode instrumentation of unsupported internals, or assumptions tied to a different Paper revision.
-- Operating-system resources and side effects Continuity cannot safely virtualize or coordinate.
+- Operating-system resources and side effects Worldline cannot safely virtualize or coordinate.
 
-These exceptions do not prohibit support. Continuity SHOULD provide compatibility adapters for important plugins or common patterns when transparent support is feasible.
+These exceptions do not prohibit support. Worldline SHOULD provide compatibility adapters for important plugins or common patterns when transparent support is feasible.
 
 ### Authority first, propagation second
 
-A state-changing plugin call MUST have cluster-correct semantics. Continuity MUST NOT generally implement compatibility as:
+A state-changing plugin call MUST have cluster-correct semantics. Worldline MUST NOT generally implement compatibility as:
 
 ~~~text
 mutate independently on every server
@@ -72,13 +72,13 @@ The preferred model is:
 
 ~~~text
 plugin invokes mutation
--> Continuity resolves authoritative owner
+-> Worldline resolves authoritative owner
 -> mutation executes exactly once under the current authority epoch
 -> authoritative result is committed
 -> resulting state, events, projections, and invalidations propagate to interested nodes
 ~~~
 
-If a plugin invokes a mutating API on a non-authoritative server, Continuity MUST either route the operation to the authoritative owner or provide an equivalent mechanism that preserves the same single-logical-server result.
+If a plugin invokes a mutating API on a non-authoritative server, Worldline MUST either route the operation to the authoritative owner or provide an equivalent mechanism that preserves the same single-logical-server result.
 
 A stale owner, stale projection, or stale player-session epoch MUST NOT commit an authoritative plugin mutation.
 
@@ -99,7 +99,7 @@ Examples include, but are not limited to:
 
 A remote boundary projection is not an independent mutable copy. A plugin mutation targeting a projected remote player, entity, chunk, or block MUST be routed to the authoritative owner and fenced by the relevant player-session epoch, partition ownership epoch, or equivalent authority token.
 
-After an authoritative mutation commits, Continuity MUST propagate the resulting state to every node that requires it for visibility, reads, handoff, migration, replication, recovery, or plugin compatibility.
+After an authoritative mutation commits, Worldline MUST propagate the resulting state to every node that requires it for visibility, reads, handoff, migration, replication, recovery, or plugin compatibility.
 
 Propagation does not mean replaying the same mutating API call independently on every node. The mutation occurs authoritatively once; other nodes receive the resulting committed state or an equivalent authoritative update.
 
@@ -131,7 +131,7 @@ plugins/ExamplePlugin/data.json
 
 those paths MUST NOT become unrelated node-local copies that silently diverge.
 
-Continuity MUST provide versioned, durable, conflict-aware semantics for plugin-owned files inside the managed plugin data directory. At minimum:
+Worldline MUST provide versioned, durable, conflict-aware semantics for plugin-owned files inside the managed plugin data directory. At minimum:
 
 - A committed write becomes visible cluster-wide.
 - Reads after a committed write do not permanently observe an older divergent node-local copy.
@@ -144,15 +144,15 @@ The exact implementation is deliberately deferred. It may use a virtualized file
 
 A simple best-effort file watcher that notices changes after arbitrary local writes is not sufficient as the sole correctness mechanism because it cannot by itself guarantee ordering, atomicity, conflict handling, or safe recovery.
 
-Updating a `config.yml` file makes the updated bytes available through the logical plugin data namespace. Continuity does not imply that a plugin which never re-reads its configuration must magically change its in-memory behavior; automatic hot reload is only required when the plugin or supported server API would ordinarily perform that reload.
+Updating a `config.yml` file makes the updated bytes available through the logical plugin data namespace. Worldline does not imply that a plugin which never re-reads its configuration must magically change its in-memory behavior; automatic hot reload is only required when the plugin or supported server API would ordinarily perform that reload.
 
 ### File-backed databases and special storage engines
 
 Some plugins place SQLite databases, embedded key-value stores, memory-mapped files, lock files, or other storage engines inside their data directory. Blindly copying an actively written database file between nodes can corrupt it or violate its consistency model.
 
-Continuity MUST NOT claim transparent safety for such files merely because they are under `getDataFolder()`.
+Worldline MUST NOT claim transparent safety for such files merely because they are under `getDataFolder()`.
 
-For common file-backed engines, Continuity MUST choose one of the following before claiming compatibility:
+For common file-backed engines, Worldline MUST choose one of the following before claiming compatibility:
 
 - Provide a storage-engine-aware adapter.
 - Pin that plugin's mutable storage execution to one logical authority and route access through it.
@@ -163,9 +163,9 @@ The compatibility matrix MUST distinguish ordinary replicated files from storage
 
 ### Plugin execution semantics
 
-Running the same unmodified plugin independently on every Continuity Server is not sufficient. It can multiply externally visible behavior.
+Running the same unmodified plugin independently on every Worldline Server is not sufficient. It can multiply externally visible behavior.
 
-Continuity MUST define one logical execution model for plugin lifecycle, commands, events, and scheduled work.
+Worldline MUST define one logical execution model for plugin lifecycle, commands, events, and scheduled work.
 
 The required semantic rules are:
 
@@ -174,7 +174,7 @@ The required semantic rules are:
 - A remote projection update MUST NOT spuriously recreate canonical server events as though the projected object had independently changed on another Paper server.
 - A scheduled task registered once by an unmodified plugin MUST NOT unintentionally execute once per physical node when single-server semantics require one logical execution.
 - Plugin lifecycle callbacks and initialization side effects MUST NOT unintentionally multiply merely because plugin code is physically present on several nodes.
-- Continuity-specific plugins MAY explicitly request node-local, partition-local, owner-affine, or other distributed execution modes through a future dedicated API.
+- Worldline-specific plugins MAY explicitly request node-local, partition-local, owner-affine, or other distributed execution modes through a future dedicated API.
 
 The exact runtime mechanism is deferred. Possible implementations include logical plugin coordinators, owner-affine execution, distributed scheduler records, execution fencing, bytecode or API interception, or plugin-specific adapters.
 
@@ -184,7 +184,7 @@ Earlier architecture MUST NOT assume that every physical plugin instance is an i
 
 Supported reads SHOULD return the logical cluster state a plugin would expect from one Paper server, subject only to explicitly documented consistency limitations.
 
-A node MUST NOT present a stale projection as authoritative merely because the plugin invoked the read locally. When correctness requires fresh authoritative state, Continuity MUST route the read, use a sufficiently current authoritative cache, or fail explicitly rather than silently returning a contradictory value.
+A node MUST NOT present a stale projection as authoritative merely because the plugin invoked the read locally. When correctness requires fresh authoritative state, Worldline MUST route the read, use a sufficiently current authoritative cache, or fail explicitly rather than silently returning a contradictory value.
 
 Cluster identities for players, entities, worlds, chunks, plugin files, scheduled tasks, and operations MUST remain stable enough to prevent physical-node transitions from appearing as unrelated logical objects.
 
@@ -192,21 +192,21 @@ Object handles retained across a player handoff or ownership change require fenc
 
 ### External databases and plugin-owned network services
 
-Continuity does not automatically replicate or coordinate data already owned by an external database or service. Such a system may already be cluster-safe, may require single-writer execution, or may have semantics unknown to Continuity.
+Worldline does not automatically replicate or coordinate data already owned by an external database or service. Such a system may already be cluster-safe, may require single-writer execution, or may have semantics unknown to Worldline.
 
-However, Continuity's execution model still MUST avoid multiplying plugin callbacks, scheduled tasks, or lifecycle behavior in ways that cause duplicate external side effects compared with one conventional Paper server.
+However, Worldline's execution model still MUST avoid multiplying plugin callbacks, scheduled tasks, or lifecycle behavior in ways that cause duplicate external side effects compared with one conventional Paper server.
 
 Important plugins that use external services MAY receive dedicated compatibility profiles or adapters.
 
 ### Compatibility levels
 
-Continuity tracks plugin support using three explicit levels:
+Worldline tracks plugin support using three explicit levels:
 
 1. **Transparent** — the unmodified plugin works correctly under the standard compatibility runtime.
-2. **Adapter-assisted** — the plugin remains unmodified, but Continuity applies a built-in compatibility profile or adapter.
-3. **Unsupported distributed behavior** — the plugin depends on behavior outside the compatibility boundary or on semantics Continuity cannot safely reproduce.
+2. **Adapter-assisted** — the plugin remains unmodified, but Worldline applies a built-in compatibility profile or adapter.
+3. **Unsupported distributed behavior** — the plugin depends on behavior outside the compatibility boundary or on semantics Worldline cannot safely reproduce.
 
-The existence of these levels does not weaken the 1.0 goal. Continuity SHOULD maximize the Transparent tier and treat significant popular-plugin incompatibilities as product defects or explicit roadmap items rather than silently accepting divergent behavior.
+The existence of these levels does not weaken the 1.0 goal. Worldline SHOULD maximize the Transparent tier and treat significant popular-plugin incompatibilities as product defects or explicit roadmap items rather than silently accepting divergent behavior.
 
 ### 1.0 delivery requirement
 
@@ -216,7 +216,7 @@ However:
 
 - No accepted architecture may intentionally make this contract impossible without a superseding ADR.
 - New ownership, storage, handoff, scheduler, or projection designs MUST be reviewed for their effect on transparent plugin compatibility.
-- Continuity MUST NOT declare 1.0 without a documented compatibility matrix and automated multi-node conformance testing for the supported contract.
+- Worldline MUST NOT declare 1.0 without a documented compatibility matrix and automated multi-node conformance testing for the supported contract.
 
 ## Consequences
 
@@ -241,16 +241,16 @@ However:
 
 ## Alternatives considered
 
-- **Require all plugins to be rewritten for Continuity:** rejected because it would discard the existing Paper and Spigot ecosystem and make adoption substantially harder.
+- **Require all plugins to be rewritten for Worldline:** rejected because it would discard the existing Paper and Spigot ecosystem and make adoption substantially harder.
 - **Run every plugin independently on every node and synchronize only Minecraft state:** rejected because scheduled tasks, lifecycle hooks, commands, external side effects, and plugin-owned files can be duplicated or diverge.
 - **Replicate every plugin mutation by replaying it on every node:** rejected because it creates multiple writers, duplicated side effects, ordering conflicts, and disagreement with the existing authoritative-owner model.
 - **Use only filesystem watchers for plugin data:** rejected as the sole correctness mechanism because post-hoc observation does not guarantee atomicity, ordering, conflict handling, or recovery.
-- **Promise literal compatibility with arbitrary JVM behavior:** rejected because Continuity cannot safely virtualize unobservable external databases, arbitrary sockets, native code, unsupported internals, and every operating-system side effect.
+- **Promise literal compatibility with arbitrary JVM behavior:** rejected because Worldline cannot safely virtualize unobservable external databases, arbitrary sockets, native code, unsupported internals, and every operating-system side effect.
 - **Defer all compatibility design until implementation near 1.0:** rejected because ownership, storage, scheduling, handoff, and projection choices made earlier could otherwise make transparent compatibility prohibitively expensive or impossible.
 
 ## Compliance
 
-An implementation conforms to this ADR only when compatibility behavior is validated against both a multi-node Continuity cluster and, where practical, a conventional single-server Paper reference environment.
+An implementation conforms to this ADR only when compatibility behavior is validated against both a multi-node Worldline cluster and, where practical, a conventional single-server Paper reference environment.
 
 The automated compatibility harness MUST cover at least:
 
@@ -272,7 +272,7 @@ For every tested operation, the harness SHOULD compare externally visible outcom
 - No unintended duplicate command, lifecycle, event, task, or external side effect caused solely by physical node count.
 - Correct observer and plugin-visible behavior across a partition boundary and player handoff.
 
-The project MUST maintain a compatibility matrix identifying the Paper version, plugin version, Continuity version, compatibility level, tested features, known limitations, and required adapter where applicable.
+The project MUST maintain a compatibility matrix identifying the Paper version, plugin version, Worldline version, compatibility level, tested features, known limitations, and required adapter where applicable.
 
 ## References
 
