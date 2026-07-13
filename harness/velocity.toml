@@ -1,0 +1,61 @@
+# Worldline vertical-slice proxy configuration (installed into proxy/proxy/run by run-slice.sh).
+# Topology per docs/vertical-slice-roadmap.md M0: one proxy, two backends, modern forwarding.
+config-version = "2.8"
+
+bind = "0.0.0.0:25565"
+motd = "<#09add3>Worldline vertical slice"
+show-max-players = 16
+online-mode = true
+force-key-authentication = true
+prevent-client-proxy-connections = false
+
+# Modern forwarding; the secret must match proxies.velocity.secret in each
+# server's config/paper-global.yml.
+player-info-forwarding-mode = "modern"
+forwarding-secret-file = "forwarding.secret"
+
+announce-forge = false
+kick-existing-players = false
+ping-passthrough = "DISABLED"
+sample-players-in-ping = false
+enable-player-address-logging = true
+
+[servers]
+server-a = "127.0.0.1:25566"
+server-b = "127.0.0.1:25567"
+
+# All players enter on server-a; crossing the partition boundary is what moves
+# them to server-b, never the join order.
+try = [
+    "server-a"
+]
+
+[forced-hosts]
+
+[advanced]
+compression-threshold = 256
+compression-level = -1
+login-ratelimit = 3000
+connection-timeout = 5000
+read-timeout = 30000
+haproxy-protocol = false
+tcp-fast-open = false
+bungee-plugin-message-channel = true
+show-ping-requests = false
+failover-on-unexpected-server-disconnect = true
+announce-proxy-commands = true
+log-command-executions = false
+log-player-connections = true
+accepts-transfers = false
+enable-reuse-port = false
+command-rate-limit = 50
+forward-commands-if-rate-limited = true
+kick-after-rate-limited-commands = 0
+tab-complete-rate-limit = 10
+kick-after-rate-limited-tab-completes = 0
+
+[query]
+enabled = false
+port = 25565
+map = "Worldline"
+show-plugins = false

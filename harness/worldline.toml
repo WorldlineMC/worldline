@@ -1,0 +1,28 @@
+# Worldline vertical-slice static partition map (ADR 0005 experimental exception).
+# One world, one dimension, one manually configured boundary: the vertical line
+# between chunk X = -1 and chunk X = 0. server-a owns the west half, server-b
+# the east half. Consumed by the proxy and both servers from M2 onward; the
+# format is slice-only and does not prefigure the production partition directory
+# (ADR 0003).
+schema-version = 1
+
+[world]
+level-name = "world"
+dimension = "minecraft:overworld"
+
+[servers.server-a]
+game-address = "127.0.0.1:25566"
+
+[servers.server-b]
+game-address = "127.0.0.1:25567"
+
+[[partitions]]
+id = "west"
+owner = "server-a"
+# Inclusive chunk-coordinate bounds; absent bounds are unbounded.
+chunk-x-max = -1
+
+[[partitions]]
+id = "east"
+owner = "server-b"
+chunk-x-min = 0
