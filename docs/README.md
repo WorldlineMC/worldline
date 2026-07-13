@@ -7,6 +7,7 @@ If an implementation conflicts with an accepted decision, the implementation is 
 ## Documents
 
 - [Architecture overview](architecture.md)
+- [Vertical-slice roadmap](vertical-slice-roadmap.md) — execution plan for the ADR 0005 player-handoff slice (informative)
 - [ADR 0001: Transparent spatial sharding](decisions/0001-transparent-spatial-sharding.md)
 - [ADR 0002: Messaging, coordination, and durable state](decisions/0002-messaging-coordination-and-state.md)
 - [ADR 0003: Partition directory, allocation, and membership changes](decisions/0003-partition-directory-allocation-and-membership.md)
