@@ -60,6 +60,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Apply server patches
+        working-directory: server
+        run: ./gradlew applyPatches
+
       - name: Compile server
         working-directory: server
         run: ./gradlew :paper-server:compileJava
