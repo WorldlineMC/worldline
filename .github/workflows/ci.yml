@@ -40,8 +40,12 @@ jobs:
         working-directory: proxy
         run: ./gradlew :velocity-proxy:test
 
+      - name: Build proxy jar
+        working-directory: proxy
+        run: ./gradlew :velocity-proxy:shadowJar
+
   server-build:
-    name: Server compile
+    name: Server build and tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -74,3 +78,11 @@ jobs:
       - name: Test Worldline server code
         working-directory: server
         run: ./gradlew :paper-server:test --tests "org.bukkit.support.suite.WorldlineTestSuite"
+
+      - name: Test full server suite
+        working-directory: server
+        run: ./gradlew :paper-server:test --tests "org.bukkit.support.suite.NormalTestSuite"
+
+      - name: Build server jar
+        working-directory: server
+        run: ./gradlew :paper-server:createBundlerJar
