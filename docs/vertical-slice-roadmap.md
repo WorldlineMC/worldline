@@ -86,9 +86,10 @@ protocol v3 carries bounded snapshot payloads. Paper freezes the source player o
 thread, suppresses source ticking and damage while preserving connection traffic, rejects
 unsupported UI/entity/protocol-sync states, and captures native player NBT plus transient
 movement, combat, attack, and item-cooldown state with transfer/tick/version/epoch fences. The
-destination validates byte-exact reserialization, loads the snapshot into its non-authoritative
-prepared player without ticking it, and proves the loaded native and transient state reproduce
-exactly before acknowledging `SNAPSHOT_STAGED`. Proxy movement buffering remains bounded at 64
+destination validates the snapshot envelope, loads it into its non-authoritative prepared player
+without ticking it, retains the received payload bytes, and proves the loaded native and transient
+state reproduce exactly before acknowledging `SNAPSHOT_STAGED`. Proxy movement buffering remains
+bounded at 64
 packets and two seconds; pre-commit failure unfreezes the source and never replays the remote-side
 crossing. Focused proxy/server tests and the full proxy suite pass. The live
 `run-freeze-stage-abort.sh` probe is ready but was not executed with a connected player in this
@@ -99,7 +100,7 @@ implementation session.
 - Proxy holds the bounded, ordered buffer of replayable input (crossing input first) with explicit size and time limits; overflow or timeout aborts and safely resumes the source.
 - Destination validates and stages the exact snapshot without ticking (`SNAPSHOT_STAGED`); any state it cannot activate exactly fails staging and aborts the transfer. Detection of out-of-scope states (vehicle, open container, sleeping, portal) aborts before freeze.
 
-**Exit:** snapshot round-trips losslessly (byte-exact re-serialization test); pre-commit abort unfreezes the source and replays only source-safe input, never the crossing movement; buffer limits demonstrably abort rather than grow.
+**Exit:** snapshot state round-trips losslessly and the received payload bytes are retained exactly; pre-commit abort unfreezes the source and replays only source-safe input, never the crossing movement; buffer limits demonstrably abort rather than grow.
 
 ### M5 — Commit, splice, and activation
 
