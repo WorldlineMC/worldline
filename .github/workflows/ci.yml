@@ -60,6 +60,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Apply server patches
+        working-directory: server
+        run: ./gradlew applyPatches
+
+      - name: Test Worldline server code
+        working-directory: server
+        run: ./gradlew :paper-server:test --tests "org.bukkit.support.suite.WorldlineTestSuite"
+
       - name: Compile server
         working-directory: server
         run: ./gradlew :paper-server:compileJava

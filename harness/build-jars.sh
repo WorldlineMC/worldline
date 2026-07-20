@@ -4,12 +4,20 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+revision_file="$repo_root/harness/.built-revisions"
+
+echo "Applying server patches..."
+(cd "$repo_root/server" && ./gradlew applyPatches)
 
 echo "Building server jar (paper-server:createBundlerJar)..."
 (cd "$repo_root/server" && ./gradlew :paper-server:createBundlerJar)
 
 echo "Building proxy jar (velocity-proxy:shadowJar)..."
 (cd "$repo_root/proxy" && ./gradlew :velocity-proxy:shadowJar)
+
+printf 'proxy=%s\nserver=%s\n' \
+    "$(git -C "$repo_root/proxy" rev-parse HEAD)" \
+    "$(git -C "$repo_root/server" rev-parse HEAD)" > "$revision_file"
 
 echo
 echo "Built jars:"

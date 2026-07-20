@@ -17,6 +17,19 @@ harness_dir="$repo_root/harness"
 proxy_run_dir="$repo_root/proxy/proxy/run"
 server_run_dir="$repo_root/server/run"
 memory_gb="${WORLDLINE_RUN_MEMORY_GB:-2}"
+revision_file="$harness_dir/.built-revisions"
+
+[[ -f "$revision_file" ]] || { echo "error: build revision record not found; run harness/build-jars.sh" >&2; exit 1; }
+expected_revisions=$(printf 'proxy=%s\nserver=%s' \
+    "$(git -C "$repo_root/proxy" rev-parse HEAD)" \
+    "$(git -C "$repo_root/server" rev-parse HEAD)")
+actual_revisions=$(sed -e '${/^$/d;}' "$revision_file")
+[[ "$actual_revisions" == "$expected_revisions" ]] || {
+    echo "error: built jars do not match the checked-out submodules; run harness/build-jars.sh" >&2
+    echo "built:    ${actual_revisions//$'\n'/, }" >&2
+    echo "expected: ${expected_revisions//$'\n'/, }" >&2
+    exit 1
+}
 
 case "$component" in
     proxy)    port=25565 ;;
@@ -43,12 +56,12 @@ if [[ "$component" == "proxy" ]]; then
 
     echo "Starting proxy on port $port"
     cd "$proxy_run_dir"
-    proxy_m1_flag=()
+    proxy_m1_flag=""
     if [[ "${WORLDLINE_M1_MANUAL_SPLICE:-0}" == "1" ]]; then
-        proxy_m1_flag=(-Dworldline.splice-target=server-b)
+        proxy_m1_flag=-Dworldline.splice-target=server-b
     fi
     exec java -Xms512M -Xmx512M -Dworldline.config=worldline.toml \
-        "${proxy_m1_flag[@]}" -Dworldline.m5.post-commit-timeout-seconds=10 \
+        ${proxy_m1_flag:+"$proxy_m1_flag"} -Dworldline.m5.post-commit-timeout-seconds=10 \
         -Dworldline.trace=true -Dvelocity.packet-decode-logging=true -Dterminal.jline=false \
         -jar "$proxy_jar"
 fi

@@ -12,12 +12,24 @@ log_dir="$harness_dir/logs"
 proxy_run_dir="$repo_root/proxy/proxy/run"
 server_run_dir="$repo_root/server/run"
 memory_gb="${WORLDLINE_RUN_MEMORY_GB:-2}"
+revision_file="$harness_dir/.built-revisions"
 
 proxy_jar="$(ls "$repo_root"/proxy/proxy/build/libs/velocity-proxy-*-all.jar 2>/dev/null | head -1 || true)"
 server_jar="$(ls "$repo_root"/server/paper-server/build/libs/paper-bundler-*.jar 2>/dev/null | head -1 || true)"
 
 [[ -n "$proxy_jar" ]] || { echo "error: proxy jar not found; build it with: cd proxy && ./gradlew :velocity-proxy:shadowJar" >&2; exit 1; }
 [[ -n "$server_jar" ]] || { echo "error: server jar not found; build it with: cd server && ./gradlew :paper-server:createBundlerJar" >&2; exit 1; }
+[[ -f "$revision_file" ]] || { echo "error: build revision record not found; run harness/build-jars.sh" >&2; exit 1; }
+expected_revisions=$(printf 'proxy=%s\nserver=%s' \
+    "$(git -C "$repo_root/proxy" rev-parse HEAD)" \
+    "$(git -C "$repo_root/server" rev-parse HEAD)")
+actual_revisions=$(sed -e '${/^$/d;}' "$revision_file")
+[[ "$actual_revisions" == "$expected_revisions" ]] || {
+    echo "error: built jars do not match the checked-out submodules; run harness/build-jars.sh" >&2
+    echo "built:    ${actual_revisions//$'\n'/, }" >&2
+    echo "expected: ${expected_revisions//$'\n'/, }" >&2
+    exit 1
+}
 for d in "$server_run_dir/server-a" "$server_run_dir/server-b"; do
     [[ -f "$d/eula.txt" ]] || { echo "error: $d is not initialized (missing eula.txt); run 'cd server && ./gradlew :paper-server:runServers' once first" >&2; exit 1; }
 done
@@ -93,12 +105,12 @@ start_server server-a 25566 25576 west
 start_server server-b 25567 25577 east
 
 echo "Starting proxy on port 25565 (log: $log_dir/proxy.log)"
-proxy_m1_flag=()
+proxy_m1_flag=""
 if [[ "${WORLDLINE_M1_MANUAL_SPLICE:-0}" == "1" ]]; then
-    proxy_m1_flag=(-Dworldline.splice-target=server-b)
+    proxy_m1_flag=-Dworldline.splice-target=server-b
 fi
 (cd "$proxy_run_dir" && exec java -Xms512M -Xmx512M -Dworldline.config=worldline.toml \
-    "${proxy_m1_flag[@]}" -Dworldline.m5.post-commit-timeout-seconds=10 \
+    ${proxy_m1_flag:+"$proxy_m1_flag"} -Dworldline.m5.post-commit-timeout-seconds=10 \
     -Dworldline.trace=true -Dvelocity.packet-decode-logging=true -Dterminal.jline=false \
     -jar "$proxy_jar" </dev/null >"$log_dir/proxy.log" 2>&1) &
 pids+=($!)
