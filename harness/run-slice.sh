@@ -82,11 +82,9 @@ trap cleanup EXIT INT TERM
 
 start_server() {
     local name="$1" port="$2" control_port="$3" partition="$4"
-    local resume=""
-    [[ "$name" == "server-b" ]] && resume=-Dworldline.resume=true
     echo "Starting $name on port $port (log: $log_dir/$name.log)"
     (cd "$server_run_dir/$name" && exec java "-Xms${memory_gb}G" "-Xmx${memory_gb}G" \
-        ${resume:+"$resume"} \
+        -Dworldline.resume=true \
         -Dworldline.config=worldline.toml \
         -Dworldline.server-id="$name" \
         -Dworldline.partition-id="$partition" \

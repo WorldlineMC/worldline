@@ -21,7 +21,8 @@ The script installs `velocity.toml`, `forwarding.secret`, and `worldline.toml` i
 
 Connect a vanilla client to `127.0.0.1:25565`; you land on `server-a`.
 
-Normal startup enables the M5 boundary-driven handoff and does not arm the old global M1 target.
+Normal startup enables the M5 boundary-driven handoff and resume on both backends, allowing a
+west → east → west round trip. It does not arm the old global M1 target.
 Walk from chunk X = -1 across X = 0 to trigger the full prepare/freeze/stage/commit/resume/
 activate/replay/cleanup path. Afterward, validate the retained logs with:
 
@@ -41,8 +42,10 @@ while still west of the boundary:
 5. Confirm in the same unmodified client that there was no disconnect, reconnect, loading screen,
    JoinGame/Respawn transition, inventory duplication, selected-slot change, or effect reset.
 6. Run `harness/assert-m5-trace.sh harness/logs`. It requires matching SHA-256 snapshot hashes at
-   source freeze and destination activation, crossing movement at replay sequence 0, ordered
-   authority phases, and no client-transition trace.
+   source freeze and destination activation, contiguous ordered proxy replay beginning at sequence 0,
+   matching transfer/player/route evidence, actual applied destination X/Y/Z, ordered authority
+   phase timestamps, and no client-transition trace. It handles both crossing directions.
+   Historical `processed first replay movement` receipt markers are insufficient and are rejected.
 
 The visual vanilla-client observation is mandatory acceptance evidence; the log assertion does not
 replace it.
@@ -116,3 +119,18 @@ the proxy; phase names are lowercase values such as `preparing_destination` and 
 - `velocity.toml` — canonical proxy config (installed into the run dir on each boot)
 - `forwarding.secret` — modern-forwarding secret (local dev only)
 - `worldline.toml` — static partition map; installed for proxy and servers on each boot
+
+## Tonight's client check
+
+See [the reproducible test checklist](tonight-test.md). The trace checker requires Python 3
+(standard library only). Run its positive and negative fixtures without starting Minecraft:
+
+```sh
+harness/assert-m5-trace.sh --self-test
+python3 -B harness/test_harness_launch.py
+```
+
+The checker validates logged proxy replay ordering and the first movement's applied position.
+It cannot establish that every replayed packet was applied exactly once, observe every simulation
+tick, or replace the unmodified-client observation. All three logs must come from the same run on
+the same host; authority timestamp comparisons assume a common clock.
