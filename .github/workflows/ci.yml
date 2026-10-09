@@ -62,7 +62,10 @@ jobs:
 
       - name: Apply server patches
         working-directory: server
-        run: ./gradlew applyPatches
+        run: |
+          git config --global user.email "no-reply@github.com"
+          git config --global user.name "GitHub Actions"
+          ./gradlew applyPatches
 
       - name: Test Worldline server code
         working-directory: server
