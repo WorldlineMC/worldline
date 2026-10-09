@@ -89,13 +89,10 @@ else
     printf 'enforce-secure-profile=false\n' >> "$d/server.properties"
 fi
 
-resume=""
-[[ "$component" == "server-b" ]] && resume=-Dworldline.resume=true
-
 echo "Starting $component on port $port"
 cd "$d"
 exec java "-Xms${memory_gb}G" "-Xmx${memory_gb}G" \
-    ${resume:+"$resume"} \
+    -Dworldline.resume=true \
     -Dworldline.config=worldline.toml \
     -Dworldline.server-id="$component" \
     -Dworldline.partition-id="$partition" \

@@ -12,6 +12,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  harness-tests:
+    name: Harness trace and launch fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check harness scripts and fixtures
+        run: |
+          bash -n harness/*.sh
+          harness/assert-m5-trace.sh --self-test
+          python3 -B harness/test_harness_launch.py
+
   proxy-tests:
     name: Proxy tests
     runs-on: ubuntu-24.04
@@ -39,6 +51,10 @@ jobs:
       - name: Test full proxy suite
         working-directory: proxy
         run: ./gradlew :velocity-proxy:test
+
+      - name: Build proxy jar
+        working-directory: proxy
+        run: ./gradlew :velocity-proxy:shadowJar
 
   server-build:
     name: Server compile
@@ -74,3 +90,7 @@ jobs:
       - name: Compile server
         working-directory: server
         run: ./gradlew :paper-server:compileJava
+
+      - name: Build server jar
+        working-directory: server
+        run: ./gradlew :paper-server:createBundlerJar
